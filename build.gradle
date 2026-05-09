@@ -36,9 +36,10 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-	// MCEF - Minecraft Chromium Embedded Framework (for in-game browser)
-	// Using include() to bundle MCEF inside the mod jar so users don't need to install it separately
-	modImplementation include("de.keksuccino:mcef-fabric:${project.mcef_version}")
+	// MCEF - Minecraft Chromium Embedded Framework (optional, for in-game browser)
+	// Compile-only: the Maven jar uses Mojang mappings which break when bundled via jar-in-jar.
+	// Users who want the embedded browser should install MCEF separately from Modrinth.
+	modCompileOnly "de.keksuccino:mcef-fabric:${project.mcef_version}"
 	
 }
 
