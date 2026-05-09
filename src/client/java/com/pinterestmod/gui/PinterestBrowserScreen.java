@@ -259,7 +259,7 @@ public class PinterestBrowserScreen extends Screen {
         int loginX = homeX + navSize + navGap + 4;
         if (mx >= loginX && mx <= loginX + loginW && my >= navY && my <= navY + navSize) {
             if (browser != null) {
-                browser.loadURL("https://www.pinterest.com/login/");
+                browser.loadURL("https://www.pinterest.com/");
             }
             return true;
         }
