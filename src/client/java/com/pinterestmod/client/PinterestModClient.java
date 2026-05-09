@@ -5,17 +5,25 @@ import com.pinterestmod.gui.PinterestConfigScreen;
 import com.pinterestmod.gui.PinterestOverlayScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import org.lwjgl.glfw.GLFW;
 
 public class PinterestModClient implements ClientModInitializer {
 
     private boolean overlayKeyWasDown = false;
     private boolean configKeyWasDown  = false;
+    private boolean mcefAvailable     = false;
 
     @Override
     public void onInitializeClient() {
         ModConfig.load();
+
+        try {
+            Class.forName("com.cinemamod.mcef.MCEF");
+            mcefAvailable = true;
+        } catch (ClassNotFoundException e) {
+            mcefAvailable = false;
+        }
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.currentScreen != null) {
@@ -33,7 +41,7 @@ public class PinterestModClient implements ClientModInitializer {
             boolean overlayKeyDown = GLFW.glfwGetKey(window, cfg.overlayKey) == GLFW.GLFW_PRESS;
             boolean overlayTrigger = overlayKeyDown && (!cfg.overlayShift || shiftDown);
             if (overlayTrigger && !overlayKeyWasDown) {
-                client.execute(() -> client.setScreen(new PinterestOverlayScreen(null)));
+                client.execute(() -> client.setScreen(createOverlayScreen()));
             }
             overlayKeyWasDown = overlayTrigger;
 
@@ -45,6 +53,20 @@ public class PinterestModClient implements ClientModInitializer {
             configKeyWasDown = configTrigger;
         });
 
-        System.out.println("[AspireMod] Loaded! Shift+V = Pinterest overlay, Shift+B = config.");
+        String mode = mcefAvailable ? "embedded browser" : "fallback (install MCEF for embedded browser)";
+        System.out.println("[AspireMod] Loaded! Shift+V = Pinterest overlay (" + mode + "), Shift+B = config.");
+    }
+
+    private Screen createOverlayScreen() {
+        if (mcefAvailable) {
+            try {
+                return (Screen) Class.forName("com.pinterestmod.gui.PinterestBrowserScreen")
+                        .getConstructor(Screen.class)
+                        .newInstance((Screen) null);
+            } catch (Exception e) {
+                System.err.println("[AspireMod] Failed to create browser screen, falling back: " + e.getMessage());
+            }
+        }
+        return new PinterestOverlayScreen(null);
     }
 }
