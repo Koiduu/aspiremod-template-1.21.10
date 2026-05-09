@@ -2,9 +2,11 @@ package com.pinterestmod.gui;
 
 import com.pinterestmod.config.ModConfig;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
@@ -153,8 +155,8 @@ public class PinterestOverlayScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        int mx = (int) mouseX, my = (int) mouseY;
+    public boolean mouseClicked(Click click, boolean doubled) {
+        int mx = (int) click.x(), my = (int) click.y();
 
         // Close button
         if (mx >= panelX + panelW - 22 && mx <= panelX + panelW - 2
@@ -185,12 +187,12 @@ public class PinterestOverlayScreen extends Screen {
             dragOffY = my - panelY;
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(click, doubled);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        int mx = (int) mouseX, my = (int) mouseY;
+    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
+        int mx = (int) click.x(), my = (int) click.y();
         if (dragging) {
             panelX = mx - dragOffX;
             panelY = my - dragOffY;
@@ -205,18 +207,20 @@ public class PinterestOverlayScreen extends Screen {
             rebuildButtons();
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        return super.mouseDragged(click, offsetX, offsetY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(Click click) {
         dragging = false;
         resizing = false;
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(click);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyInput keyInput) {
+        int keyCode = keyInput.key();
+        int modifiers = keyInput.modifiers();
         ModConfig cfg = ModConfig.get();
         boolean shiftDown = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
         if (keyCode == cfg.overlayKey && shiftDown == cfg.overlayShift) {
@@ -233,7 +237,7 @@ public class PinterestOverlayScreen extends Screen {
             MinecraftClient.getInstance().setScreen(parentScreen);
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(keyInput);
     }
 
     private void saveState() {
