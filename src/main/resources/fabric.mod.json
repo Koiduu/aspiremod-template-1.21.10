@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "pinterestmod",
+  "version": "1.0.0",
+  "name": "AspireMod",
+  "description": "Browse Pinterest without leaving Minecraft. Press Shift+V to open a floating Pinterest panel.",
+  "authors": ["Shiat"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.pinterestmod.client.PinterestModClient"
+    ]
+  },
+  "mixins": [],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.10",
+    "java": ">=21"
+  }
+}
