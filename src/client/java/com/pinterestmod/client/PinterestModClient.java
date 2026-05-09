@@ -3,6 +3,7 @@ package com.pinterestmod.client;
 import com.pinterestmod.config.ModConfig;
 import com.pinterestmod.gui.PinterestConfigScreen;
 import com.pinterestmod.gui.PinterestOverlayScreen;
+import com.pinterestmod.gui.ReferenceImageHud;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.gui.screen.Screen;
@@ -17,6 +18,7 @@ public class PinterestModClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ModConfig.load();
+        ReferenceImageHud.init();
 
         try {
             Class.forName("com.cinemamod.mcef.MCEF");

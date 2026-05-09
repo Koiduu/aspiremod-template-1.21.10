@@ -27,6 +27,14 @@ public class ModConfig {
     public int overlayWidth = 480;
     public int overlayHeight = 640;
 
+    // Reference image pinned to screen
+    public String refImageUrl = "";
+    public int refImageX = -1;
+    public int refImageY = 10;
+    public int refImageW = 150;
+    public int refImageH = 150;
+    public boolean refImageVisible = false;
+
     public static ModConfig get() {
         if (INSTANCE == null) load();
         return INSTANCE;
