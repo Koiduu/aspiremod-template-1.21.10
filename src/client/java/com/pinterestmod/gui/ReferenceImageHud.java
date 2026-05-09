@@ -17,6 +17,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ReferenceImageHud {
 
@@ -27,8 +29,11 @@ public class ReferenceImageHud {
 
     private static final int MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
     private static final int MAX_IMAGE_DIM = 1024;
+    private static final int MAX_HTML_BYTES = 512 * 1024;
     private static final Path CACHE_DIR = FabricLoader.getInstance().getGameDir()
             .resolve("pinterestmod_cache");
+    private static final Pattern PINIMG_PATTERN =
+            Pattern.compile("https://i\\.pinimg\\.com/[^\"'\\s]+");
 
     public static void init() {
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> render(drawContext));
@@ -90,6 +95,66 @@ public class ReferenceImageHud {
         }
     }
 
+    private static boolean isPinterestPageUrl(String url) {
+        return url.contains("pin.it/")
+                || url.contains("pinterest.com/pin/")
+                || (url.contains("pinterest.com") && !url.contains("pinimg.com"));
+    }
+
+    private static String resolveImageUrl(String url) throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+        conn.setRequestProperty("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(15000);
+        conn.setInstanceFollowRedirects(true);
+
+        InputStream is = conn.getInputStream();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int totalRead = 0;
+        int n;
+        while ((n = is.read(buf)) != -1) {
+            totalRead += n;
+            if (totalRead > MAX_HTML_BYTES) break;
+            baos.write(buf, 0, n);
+        }
+        is.close();
+        conn.disconnect();
+
+        String html = baos.toString("UTF-8");
+        String bestUrl = null;
+        int bestRes = 0;
+
+        Matcher m = PINIMG_PATTERN.matcher(html);
+        while (m.find()) {
+            String found = m.group();
+            if (found.contains("/originals/")) {
+                return found;
+            }
+            int res = 0;
+            if (found.contains("/1200x/")) res = 1200;
+            else if (found.contains("/736x/")) res = 736;
+            else if (found.contains("/564x/")) res = 564;
+            else if (found.contains("/474x/")) res = 474;
+            else if (found.contains("/236x/")) res = 236;
+            else if (found.contains("/170x/")) res = 170;
+            else res = 100;
+
+            if (res > bestRes) {
+                bestRes = res;
+                bestUrl = found;
+            }
+        }
+
+        if (bestUrl != null) {
+            String upgraded = bestUrl.replaceFirst("/\\d+x/", "/originals/");
+            System.out.println("[AspireMod] Resolved Pinterest URL to: " + upgraded);
+            return upgraded;
+        }
+        return null;
+    }
+
     public static void downloadImage(String url) {
         loading = true;
         loadedUrl = url;
@@ -104,12 +169,34 @@ public class ReferenceImageHud {
                     data = Files.readAllBytes(cacheFile);
                     System.out.println("[AspireMod] Loaded reference image from cache");
                 } else {
-                    HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+                    String imageUrl = url;
+                    if (isPinterestPageUrl(url)) {
+                        System.out.println("[AspireMod] Resolving Pinterest page URL: " + url);
+                        String resolved = resolveImageUrl(url);
+                        if (resolved == null) {
+                            loading = false;
+                            loadedUrl = "";
+                            errorMessage = "Could not find image";
+                            return;
+                        }
+                        imageUrl = resolved;
+                    }
+
+                    HttpURLConnection conn = (HttpURLConnection) URI.create(imageUrl).toURL().openConnection();
                     conn.setRequestProperty("User-Agent",
                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
                     conn.setConnectTimeout(10000);
                     conn.setReadTimeout(15000);
                     conn.setInstanceFollowRedirects(true);
+
+                    String contentType = conn.getContentType();
+                    if (contentType != null && contentType.startsWith("text/")) {
+                        conn.disconnect();
+                        loading = false;
+                        loadedUrl = "";
+                        errorMessage = "Not an image URL";
+                        return;
+                    }
 
                     int contentLength = conn.getContentLength();
                     if (contentLength > MAX_DOWNLOAD_BYTES) {
