@@ -27,12 +27,15 @@ public class PinterestBrowserScreen extends Screen {
     private static final int PIN_BAR_H = 22;
     private static final int MIN_W = 280;
     private static final int MIN_H = 200;
-    private static final int RESIZE_HANDLE = 12;
+    private static final int RESIZE_HANDLE = 16;
+    private static final int EDGE_GRAB = 6;
 
     private boolean dragging = false;
     private int dragOffX, dragOffY;
     private boolean resizing = false;
+    private int resizeEdge = 0; // bitmask: 1=right, 2=bottom, 4=left, 8=top
     private int resizeStartMouseX, resizeStartMouseY, resizeStartW, resizeStartH;
+    private int resizeStartX, resizeStartY;
     private boolean mcefFailed = false;
 
     private boolean showPinBar = false;
@@ -57,6 +60,8 @@ public class PinterestBrowserScreen extends Screen {
     private static final int COLOR_NAV_HOVER = 0xFF3A3A3A;
     private static final int COLOR_PIN = 0xFF388E3C;
     private static final int COLOR_PIN_HOVER = 0xFF4CAF50;
+    private static final int COLOR_PERF = 0xFF1565C0;
+    private static final int COLOR_PERF_HOVER = 0xFF1E88E5;
 
     public PinterestBrowserScreen(Screen parent) {
         super(Text.literal("Pinterest"));
@@ -112,18 +117,24 @@ public class PinterestBrowserScreen extends Screen {
         return this.client != null ? this.client.getWindow().getScaleFactor() : 1.0;
     }
 
+    private double effectiveScale() {
+        double gui = guiScale();
+        double bs = ModConfig.get().browserScale;
+        return Math.max(0.25, gui * Math.max(0.25, Math.min(1.0, bs)));
+    }
+
     private int browserMouseX(double mouseX) {
-        return (int) ((mouseX - contentX()) * guiScale());
+        return (int) ((mouseX - contentX()) * effectiveScale());
     }
 
     private int browserMouseY(double mouseY) {
-        return (int) ((mouseY - contentY()) * guiScale());
+        return (int) ((mouseY - contentY()) * effectiveScale());
     }
 
     private void resizeBrowser() {
         if (browser != null) {
-            int bw = (int) (contentW() * guiScale());
-            int bh = (int) (contentH() * guiScale());
+            int bw = (int) (contentW() * effectiveScale());
+            int bh = (int) (contentH() * effectiveScale());
             if (bw > 0 && bh > 0) {
                 browser.resize(bw, bh);
             }
@@ -194,6 +205,16 @@ public class PinterestBrowserScreen extends Screen {
                 pinHover ? COLOR_PIN_HOVER : COLOR_PIN);
         ctx.drawText(this.textRenderer, pinText, pinX + 4, navY + 4, COLOR_TEXT, false);
 
+        ModConfig perfCfg = ModConfig.get();
+        String perfText = perfCfg.browserScale < 1.0 ? "HD" : "Lite";
+        int perfBtnW = this.textRenderer.getWidth(perfText) + 8;
+        int perfX = pinX + pinBtnW + 4;
+        boolean perfHover = mouseX >= perfX && mouseX <= perfX + perfBtnW
+                && mouseY >= navY && mouseY <= navY + navSize;
+        ctx.fill(perfX, navY, perfX + perfBtnW, navY + navSize,
+                perfHover ? COLOR_PERF_HOVER : COLOR_PERF);
+        ctx.drawText(this.textRenderer, perfText, perfX + 4, navY + 4, COLOR_TEXT, false);
+
         int closeX = panelX + panelW - 22;
         boolean closeHover = mouseX >= closeX && mouseX <= panelX + panelW - 2
                 && mouseY >= panelY + 2 && mouseY <= panelY + TITLE_BAR_H - 2;
@@ -254,11 +275,12 @@ public class PinterestBrowserScreen extends Screen {
         ctx.fill(panelX + panelW - RESIZE_HANDLE, panelY + panelH - RESIZE_HANDLE,
                 panelX + panelW, panelY + panelH, COLOR_RESIZE);
         ctx.drawText(this.textRenderer, "//",
-                panelX + panelW - RESIZE_HANDLE + 1, panelY + panelH - RESIZE_HANDLE + 2,
+                panelX + panelW - RESIZE_HANDLE + 2, panelY + panelH - RESIZE_HANDLE + 3,
                 0xFFAAAAAA, false);
 
         ModConfig cfg = ModConfig.get();
-        String hint = cfg.getOverlayKeyName() + " = close | drag title = move | corner = resize";
+        String scaleLabel = cfg.browserScale < 1.0 ? " | Lite mode (faster)" : "";
+        String hint = cfg.getOverlayKeyName() + " = close | drag edges = resize" + scaleLabel;
         ctx.drawText(this.textRenderer, hint, panelX + 6, panelY + panelH - 11, 0xFF666666, false);
 
         if (!statusMsg.isEmpty() && System.currentTimeMillis() - statusMsgTime < 3000) {
@@ -423,13 +445,28 @@ public class PinterestBrowserScreen extends Screen {
             }
         }
 
-        if (mx >= panelX + panelW - RESIZE_HANDLE && mx <= panelX + panelW
-                && my >= panelY + panelH - RESIZE_HANDLE && my <= panelY + panelH) {
+        String perfText2 = cfgRef.browserScale < 1.0 ? "HD" : "Lite";
+        int perfBtnW2 = this.textRenderer.getWidth(perfText2) + 8;
+        int perfX2 = pinX + pinBtnW + 4;
+        if (mx >= perfX2 && mx <= perfX2 + perfBtnW2 && my >= navY && my <= navY + navSize) {
+            ModConfig perfCfg2 = ModConfig.get();
+            perfCfg2.browserScale = perfCfg2.browserScale < 1.0 ? 1.0 : 0.5;
+            perfCfg2.save();
+            resizeBrowser();
+            showStatus(perfCfg2.browserScale < 1.0 ? "Lite mode: faster rendering" : "HD mode: full quality");
+            return true;
+        }
+
+        int edge = getResizeEdge(mx, my);
+        if (edge != 0) {
             resizing = true;
+            resizeEdge = edge;
             resizeStartMouseX = mx;
             resizeStartMouseY = my;
             resizeStartW = panelW;
             resizeStartH = panelH;
+            resizeStartX = panelX;
+            resizeStartY = panelY;
             return true;
         }
 
@@ -475,10 +512,34 @@ public class PinterestBrowserScreen extends Screen {
             return true;
         }
         if (resizing) {
-            panelW = Math.max(MIN_W, resizeStartW + (mx - resizeStartMouseX));
-            panelH = Math.max(MIN_H, resizeStartH + (my - resizeStartMouseY));
+            if ((resizeEdge & 1) != 0) {
+                panelW = Math.max(MIN_W, resizeStartW + (mx - resizeStartMouseX));
+            }
+            if ((resizeEdge & 2) != 0) {
+                panelH = Math.max(MIN_H, resizeStartH + (my - resizeStartMouseY));
+            }
+            if ((resizeEdge & 4) != 0) {
+                int newX = resizeStartX + (mx - resizeStartMouseX);
+                int newW = resizeStartW - (mx - resizeStartMouseX);
+                if (newW >= MIN_W) {
+                    panelX = newX;
+                    panelW = newW;
+                }
+            }
+            if ((resizeEdge & 8) != 0) {
+                int newY = resizeStartY + (my - resizeStartMouseY);
+                int newH = resizeStartH - (my - resizeStartMouseY);
+                if (newH >= MIN_H) {
+                    panelY = newY;
+                    panelH = newH;
+                }
+            }
             clampPanel();
             resizeBrowser();
+            if (urlField != null) {
+                urlField.setX(panelX + 4);
+                urlField.setWidth(panelW - 50);
+            }
             return true;
         }
         return super.mouseDragged(click, offsetX, offsetY);
@@ -653,10 +714,37 @@ public class PinterestBrowserScreen extends Screen {
         }
     }
 
+    private int getResizeEdge(int mx, int my) {
+        int edge = 0;
+        if (mx >= panelX + panelW - RESIZE_HANDLE && mx <= panelX + panelW
+                && my >= panelY + panelH - RESIZE_HANDLE && my <= panelY + panelH) {
+            return 1 | 2; // corner = right + bottom
+        }
+        if (mx >= panelX + panelW - EDGE_GRAB && mx <= panelX + panelW
+                && my >= panelY + TITLE_BAR_H && my <= panelY + panelH) {
+            edge |= 1; // right
+        }
+        if (my >= panelY + panelH - EDGE_GRAB && my <= panelY + panelH
+                && mx >= panelX && mx <= panelX + panelW) {
+            edge |= 2; // bottom
+        }
+        if (mx >= panelX && mx <= panelX + EDGE_GRAB
+                && my >= panelY && my <= panelY + panelH) {
+            edge |= 4; // left
+        }
+        if (my >= panelY && my <= panelY + EDGE_GRAB
+                && mx >= panelX && mx <= panelX + panelW) {
+            edge |= 8; // top (above title bar area)
+        }
+        return edge;
+    }
+
     private void clampPanel() {
         if (this.client == null) return;
-        panelX = Math.max(0, Math.min(panelX, this.width - panelW));
-        panelY = Math.max(0, Math.min(panelY, this.height - panelH));
+        panelX = Math.max(0, Math.min(panelX, this.width - MIN_W));
+        panelY = Math.max(0, Math.min(panelY, this.height - MIN_H));
+        panelW = Math.min(panelW, this.width - panelX);
+        panelH = Math.min(panelH, this.height - panelY);
     }
 
     @Override
