@@ -31,6 +31,7 @@ public class PinterestBrowserScreen extends Screen {
     private int dragOffX, dragOffY;
     private boolean resizing = false;
     private int resizeStartMouseX, resizeStartMouseY, resizeStartW, resizeStartH;
+    private boolean mcefFailed = false;
 
     private static final int COLOR_BG = 0xFF1E1E1E;
     private static final int COLOR_TITLE_BAR = 0xFFE60023;
@@ -62,11 +63,21 @@ public class PinterestBrowserScreen extends Screen {
         }
         clampPanel();
 
-        if (browser == null) {
-            String url = cfg.isLinked
-                    ? "https://www.pinterest.com/"
-                    : "https://www.pinterest.com/ideas/";
-            browser = MCEF.createBrowser(url, true);
+        if (browser == null && !mcefFailed) {
+            try {
+                if (!MCEF.isInitialized()) {
+                    System.err.println("[AspireMod] MCEF is not initialized. Chromium may have failed to download or load.");
+                    mcefFailed = true;
+                } else {
+                    String url = cfg.isLinked
+                            ? "https://www.pinterest.com/"
+                            : "https://www.pinterest.com/ideas/";
+                    browser = MCEF.createBrowser(url, true);
+                }
+            } catch (Exception e) {
+                System.err.println("[AspireMod] Failed to create MCEF browser: " + e.getMessage());
+                mcefFailed = true;
+            }
         }
         resizeBrowser();
     }
@@ -160,16 +171,33 @@ public class PinterestBrowserScreen extends Screen {
         ctx.drawText(this.textRenderer, "X", closeX + 7, panelY + 7, COLOR_TEXT, false);
 
         // Browser content
-        Identifier texLoc = getBrowserTextureLocation();
-        if (texLoc != null) {
-            ctx.drawTexture(RenderPipelines.GUI_TEXTURED, texLoc,
-                    contentX(), contentY(), 0.0F, 0.0F,
-                    contentW(), contentH(), contentW(), contentH());
+        if (mcefFailed) {
+            int centerX = panelX + panelW / 2;
+            int msgY = contentY() + 20;
+            String errTitle = "Browser Failed to Initialize";
+            ctx.drawText(this.textRenderer, errTitle,
+                    centerX - this.textRenderer.getWidth(errTitle) / 2, msgY, 0xFFFF6666, false);
+            String errMsg1 = "MCEF could not load the Chromium engine.";
+            ctx.drawText(this.textRenderer, errMsg1,
+                    centerX - this.textRenderer.getWidth(errMsg1) / 2, msgY + 16, COLOR_TEXT, false);
+            String errMsg2 = "Try: delete mcef-libraries folder in .minecraft/mods";
+            ctx.drawText(this.textRenderer, errMsg2,
+                    centerX - this.textRenderer.getWidth(errMsg2) / 2, msgY + 30, 0xFFAAAAAA, false);
+            String errMsg3 = "and install Visual C++ Redistributable, then relaunch.";
+            ctx.drawText(this.textRenderer, errMsg3,
+                    centerX - this.textRenderer.getWidth(errMsg3) / 2, msgY + 42, 0xFFAAAAAA, false);
         } else {
-            String loadMsg = "Loading Pinterest...";
-            int tw = this.textRenderer.getWidth(loadMsg);
-            ctx.drawText(this.textRenderer, loadMsg,
-                    panelX + panelW / 2 - tw / 2, panelY + panelH / 2, COLOR_TEXT, false);
+            Identifier texLoc = getBrowserTextureLocation();
+            if (texLoc != null) {
+                ctx.drawTexture(RenderPipelines.GUI_TEXTURED, texLoc,
+                        contentX(), contentY(), 0.0F, 0.0F,
+                        contentW(), contentH(), contentW(), contentH());
+            } else {
+                String loadMsg = "Loading Pinterest...";
+                int tw = this.textRenderer.getWidth(loadMsg);
+                ctx.drawText(this.textRenderer, loadMsg,
+                        panelX + panelW / 2 - tw / 2, panelY + panelH / 2, COLOR_TEXT, false);
+            }
         }
 
         // Resize handle
