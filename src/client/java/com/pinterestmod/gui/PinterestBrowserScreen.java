@@ -69,10 +69,7 @@ public class PinterestBrowserScreen extends Screen {
                     System.err.println("[AspireMod] MCEF is not initialized. Chromium may have failed to download or load.");
                     mcefFailed = true;
                 } else {
-                    String url = cfg.isLinked
-                            ? "https://www.pinterest.com/"
-                            : "https://www.pinterest.com/ideas/";
-                    browser = MCEF.createBrowser(url, true);
+                    browser = MCEF.createBrowser("https://www.pinterest.com/ideas/", true);
                 }
             } catch (Exception e) {
                 System.err.println("[AspireMod] Failed to create MCEF browser: " + e.getMessage());
@@ -162,6 +159,14 @@ public class PinterestBrowserScreen extends Screen {
         ctx.fill(homeX, navY, homeX + navSize, navY + navSize, homeHover ? COLOR_NAV_HOVER : COLOR_NAV);
         ctx.drawText(this.textRenderer, "H", homeX + 5, navY + 4, COLOR_TEXT, false);
 
+        // Login button
+        int loginW = this.textRenderer.getWidth("Login") + 8;
+        int loginX = homeX + navSize + navGap + 4;
+        boolean loginHover = mouseX >= loginX && mouseX <= loginX + loginW
+                && mouseY >= navY && mouseY <= navY + navSize;
+        ctx.fill(loginX, navY, loginX + loginW, navY + navSize, loginHover ? COLOR_NAV_HOVER : COLOR_NAV);
+        ctx.drawText(this.textRenderer, "Login", loginX + 4, navY + 4, COLOR_TEXT, false);
+
         // Close button
         int closeX = panelX + panelW - 22;
         boolean closeHover = mouseX >= closeX && mouseX <= panelX + panelW - 2
@@ -245,11 +250,16 @@ public class PinterestBrowserScreen extends Screen {
         int homeX = fwdX + navSize + navGap;
         if (mx >= homeX && mx <= homeX + navSize && my >= navY && my <= navY + navSize) {
             if (browser != null) {
-                ModConfig cfg = ModConfig.get();
-                String homeUrl = cfg.isLinked
-                        ? "https://www.pinterest.com/"
-                        : "https://www.pinterest.com/ideas/";
-                browser.loadURL(homeUrl);
+                browser.loadURL("https://www.pinterest.com/ideas/");
+            }
+            return true;
+        }
+        // Login button
+        int loginW = this.textRenderer.getWidth("Login") + 8;
+        int loginX = homeX + navSize + navGap + 4;
+        if (mx >= loginX && mx <= loginX + loginW && my >= navY && my <= navY + navSize) {
+            if (browser != null) {
+                browser.loadURL("https://www.pinterest.com/login/");
             }
             return true;
         }
