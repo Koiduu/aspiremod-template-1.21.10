@@ -26,6 +26,7 @@ public class ModConfig {
     public int overlayY = -1;
     public int overlayWidth = 480;
     public int overlayHeight = 640;
+    public double browserScale = 1.0; // 0.5 = half resolution (faster), 1.0 = full
 
     // Reference image pinned to screen
     public String refImageUrl = "";
