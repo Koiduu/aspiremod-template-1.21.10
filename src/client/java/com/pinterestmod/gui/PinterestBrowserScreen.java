@@ -329,7 +329,7 @@ public class PinterestBrowserScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (isInContentArea(mouseX, mouseY) && browser != null) {
-            browser.sendMouseWheel(browserMouseX(mouseX), browserMouseY(mouseY), scrollY, 0);
+            browser.sendMouseWheel(browserMouseX(mouseX), browserMouseY(mouseY), scrollY * 120, 0);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
