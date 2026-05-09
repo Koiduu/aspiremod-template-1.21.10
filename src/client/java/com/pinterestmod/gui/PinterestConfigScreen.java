@@ -176,8 +176,6 @@ public class PinterestConfigScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        this.renderBackground(ctx, mouseX, mouseY, delta);
-
         int cx = this.width / 2;
         int panelX = cx - 180;
         int tabY = 60;
