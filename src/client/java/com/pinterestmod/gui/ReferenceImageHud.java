@@ -241,7 +241,7 @@ public class ReferenceImageHud {
         loadedUrl = url;
         errorMessage = "";
 
-        Path cacheFile = CACHE_DIR.resolve(urlHash(url) + ".png");
+        Path cacheFile = CACHE_DIR.resolve(urlHash(url) + ".dat");
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -256,7 +256,6 @@ public class ReferenceImageHud {
                         String resolved = resolveImageUrl(url);
                         if (resolved == null) {
                             loading = false;
-                            loadedUrl = "";
                             errorMessage = "Could not find image";
                             return;
                         }
@@ -273,7 +272,6 @@ public class ReferenceImageHud {
                     }
                     if (imgData == null) {
                         loading = false;
-                        loadedUrl = "";
                         errorMessage = "Download failed";
                         return;
                     }
@@ -325,15 +323,14 @@ public class ReferenceImageHud {
                                 + img.getWidth() + "x" + img.getHeight());
                     } catch (Exception e) {
                         System.err.println("[AspireMod] Failed to load reference image: " + e.getMessage());
+                        try { Files.deleteIfExists(cacheFile); } catch (IOException ignored) {}
                         loading = false;
-                        loadedUrl = "";
-                        errorMessage = "Bad image";
+                        errorMessage = "Bad image (delete pinterestmod_cache and retry)";
                     }
                 });
             } catch (Exception e) {
                 System.err.println("[AspireMod] Failed to download reference image: " + e.getMessage());
                 loading = false;
-                loadedUrl = "";
                 errorMessage = "Download failed";
             }
         });
