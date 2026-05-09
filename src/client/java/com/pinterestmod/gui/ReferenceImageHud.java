@@ -101,8 +101,38 @@ public class ReferenceImageHud {
                 || (url.contains("pinterest.com") && !url.contains("pinimg.com"));
     }
 
+    private static String followRedirects(String url) throws IOException {
+        String current = url;
+        for (int i = 0; i < 10; i++) {
+            HttpURLConnection conn = (HttpURLConnection) URI.create(current).toURL().openConnection();
+            conn.setRequestProperty("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            conn.setInstanceFollowRedirects(false);
+            int code = conn.getResponseCode();
+            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                String loc = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (loc == null) return current;
+                if (loc.startsWith("/")) {
+                    URI base = URI.create(current);
+                    loc = base.getScheme() + "://" + base.getHost() + loc;
+                }
+                current = loc;
+            } else {
+                conn.disconnect();
+                return current;
+            }
+        }
+        return current;
+    }
+
     private static String resolveImageUrl(String url) throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+        String finalUrl = followRedirects(url);
+        System.out.println("[AspireMod] Followed redirects to: " + finalUrl);
+
+        HttpURLConnection conn = (HttpURLConnection) URI.create(finalUrl).toURL().openConnection();
         conn.setRequestProperty("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
         conn.setConnectTimeout(10000);
@@ -148,11 +178,62 @@ public class ReferenceImageHud {
         }
 
         if (bestUrl != null) {
-            String upgraded = bestUrl.replaceFirst("/\\d+x/", "/originals/");
-            System.out.println("[AspireMod] Resolved Pinterest URL to: " + upgraded);
-            return upgraded;
+            System.out.println("[AspireMod] Found image URL: " + bestUrl);
+            return bestUrl;
         }
         return null;
+    }
+
+    private static byte[] downloadBytes(String imageUrl) {
+        try {
+            HttpURLConnection conn = (HttpURLConnection) URI.create(imageUrl).toURL().openConnection();
+            conn.setRequestProperty("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(15000);
+            conn.setInstanceFollowRedirects(true);
+
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                conn.disconnect();
+                System.err.println("[AspireMod] HTTP " + code + " for " + imageUrl);
+                return null;
+            }
+
+            String contentType = conn.getContentType();
+            if (contentType != null && contentType.startsWith("text/")) {
+                conn.disconnect();
+                System.err.println("[AspireMod] Not an image (content-type: " + contentType + ")");
+                return null;
+            }
+
+            int contentLength = conn.getContentLength();
+            if (contentLength > MAX_DOWNLOAD_BYTES) {
+                conn.disconnect();
+                return null;
+            }
+
+            InputStream is = conn.getInputStream();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int totalRead = 0;
+            int n;
+            while ((n = is.read(buf)) != -1) {
+                totalRead += n;
+                if (totalRead > MAX_DOWNLOAD_BYTES) {
+                    is.close();
+                    conn.disconnect();
+                    return null;
+                }
+                baos.write(buf, 0, n);
+            }
+            is.close();
+            conn.disconnect();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            System.err.println("[AspireMod] Download error for " + imageUrl + ": " + e.getMessage());
+            return null;
+        }
     }
 
     public static void downloadImage(String url) {
@@ -160,7 +241,7 @@ public class ReferenceImageHud {
         loadedUrl = url;
         errorMessage = "";
 
-        Path cacheFile = CACHE_DIR.resolve(urlHash(url) + ".png");
+        Path cacheFile = CACHE_DIR.resolve(urlHash(url) + ".dat");
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -175,58 +256,26 @@ public class ReferenceImageHud {
                         String resolved = resolveImageUrl(url);
                         if (resolved == null) {
                             loading = false;
-                            loadedUrl = "";
                             errorMessage = "Could not find image";
                             return;
                         }
                         imageUrl = resolved;
                     }
 
-                    HttpURLConnection conn = (HttpURLConnection) URI.create(imageUrl).toURL().openConnection();
-                    conn.setRequestProperty("User-Agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-                    conn.setConnectTimeout(10000);
-                    conn.setReadTimeout(15000);
-                    conn.setInstanceFollowRedirects(true);
-
-                    String contentType = conn.getContentType();
-                    if (contentType != null && contentType.startsWith("text/")) {
-                        conn.disconnect();
-                        loading = false;
-                        loadedUrl = "";
-                        errorMessage = "Not an image URL";
-                        return;
-                    }
-
-                    int contentLength = conn.getContentLength();
-                    if (contentLength > MAX_DOWNLOAD_BYTES) {
-                        conn.disconnect();
-                        loading = false;
-                        loadedUrl = "";
-                        errorMessage = "Image too large (>5MB)";
-                        return;
-                    }
-
-                    InputStream is = conn.getInputStream();
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    byte[] buf = new byte[8192];
-                    int totalRead = 0;
-                    int n;
-                    while ((n = is.read(buf)) != -1) {
-                        totalRead += n;
-                        if (totalRead > MAX_DOWNLOAD_BYTES) {
-                            is.close();
-                            conn.disconnect();
-                            loading = false;
-                            loadedUrl = "";
-                            errorMessage = "Image too large (>5MB)";
-                            return;
+                    byte[] imgData = downloadBytes(imageUrl);
+                    if (imgData == null) {
+                        String fallback = imageUrl.replaceFirst("/originals/", "/736x/");
+                        if (!fallback.equals(imageUrl)) {
+                            System.out.println("[AspireMod] Originals failed, trying 736x: " + fallback);
+                            imgData = downloadBytes(fallback);
                         }
-                        baos.write(buf, 0, n);
                     }
-                    is.close();
-                    conn.disconnect();
-                    data = baos.toByteArray();
+                    if (imgData == null) {
+                        loading = false;
+                        errorMessage = "Download failed";
+                        return;
+                    }
+                    data = imgData;
 
                     try {
                         Files.write(cacheFile, data);
@@ -274,15 +323,14 @@ public class ReferenceImageHud {
                                 + img.getWidth() + "x" + img.getHeight());
                     } catch (Exception e) {
                         System.err.println("[AspireMod] Failed to load reference image: " + e.getMessage());
+                        try { Files.deleteIfExists(cacheFile); } catch (IOException ignored) {}
                         loading = false;
-                        loadedUrl = "";
-                        errorMessage = "Bad image";
+                        errorMessage = "Bad image (delete pinterestmod_cache and retry)";
                     }
                 });
             } catch (Exception e) {
                 System.err.println("[AspireMod] Failed to download reference image: " + e.getMessage());
                 loading = false;
-                loadedUrl = "";
                 errorMessage = "Download failed";
             }
         });
